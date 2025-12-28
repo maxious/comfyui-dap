@@ -1,0 +1,108 @@
+import os
+import sys
+import torch
+import folder_paths
+import comfy.model_management as mm
+from huggingface_hub import hf_hub_download
+from argparse import Namespace
+
+# Add dap_core to sys.path so imports work
+current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+dap_core_path = os.path.join(current_dir, "dap_core")
+if dap_core_path not in sys.path:
+    sys.path.insert(0, dap_core_path)
+
+# Import DAP class after sys.path update
+try:
+    from networks.dap import DAP
+except ImportError:
+    # Fallback/Safety check
+    print("DAP import failed. Ensure dap_core is in path.")
+    DAP = None
+
+
+class DAP_Loader:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model_size": (["vitl"], {"default": "vitl"}),
+                "precision": (["fp16", "fp32", "bf16"], {"default": "fp16"}),
+            }
+        }
+
+    RETURN_TYPES = ("DAP_MODEL",)
+    RETURN_NAMES = ("dap_model",)
+    FUNCTION = "load_model"
+    CATEGORY = "DAP"
+
+    def load_model(self, model_size, precision):
+        device = mm.get_torch_device()
+
+        # 1. Define Model Files
+        # Mapping size to HF filename. Currently only 'model.pth' is available.
+        # size mapping is kept for future expansion.
+        model_filename = "model.pth"
+
+        # 2. Download/Locate Model
+        # Check standard ComfyUI locations first
+        ckpt_path = folder_paths.get_full_path("checkpoints", model_filename)
+
+        if not ckpt_path:
+            # Check dedicated folder
+            dap_models_dir = os.path.join(folder_paths.models_dir, "dap")
+            if not os.path.exists(dap_models_dir):
+                os.makedirs(dap_models_dir)
+
+            ckpt_path = os.path.join(dap_models_dir, model_filename)
+
+            if not os.path.exists(ckpt_path):
+                print(f"Downloading {model_filename} to {ckpt_path}...")
+                try:
+                    ckpt_path = hf_hub_download(
+                        repo_id="Insta360-Research/DAP-weights",
+                        filename=model_filename,
+                        local_dir=dap_models_dir,
+                    )
+                except Exception as e:
+                    raise RuntimeError(f"Failed to download model: {e}")
+
+        # 3. Initialize Model with Patching
+        args = Namespace()
+        args.midas_model_type = (
+            model_size  # Fixed to 'vitl' for now based on hardcoded arch in dap.py
+        )
+        args.fine_tune_type = "none"
+        args.min_depth = 0.001
+        args.max_depth = 1.0
+        args.train_decoder = True
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(dap_core_path)
+            print(f"Changed CWD to {dap_core_path} for initialization")
+
+            model = DAP(args)
+
+            state_dict = torch.load(ckpt_path, map_location="cpu")
+            # Handle possible "module." prefix if saved from DDP
+            if state_dict and list(state_dict.keys())[0].startswith("module."):
+                state_dict = {
+                    k.replace("module.", ""): v for k, v in state_dict.items()
+                }
+
+            model.load_state_dict(state_dict, strict=False)
+
+        finally:
+            os.chdir(original_cwd)
+            print(f"Restored CWD to {original_cwd}")
+
+        # 4. Quantization / Precision
+        if precision == "fp16":
+            model = model.half()
+        elif precision == "bf16":
+            model = model.bfloat16()
+
+        model.eval()
+
+        return ({"model": model, "precision": precision},)

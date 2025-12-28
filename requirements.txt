@@ -1,0 +1,10 @@
+einops
+mmengine
+open3d
+pyexr
+huggingface_hub
+torchmetrics
+xformers
+matplotlib
+safetensors
+opencv-python
