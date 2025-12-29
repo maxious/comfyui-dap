@@ -60,7 +60,11 @@ class DAP_Panoramic_Mesh:
         else:
             d_np = d_np.squeeze()
 
+        # Prevent vertices from collapsing to 0,0,0 by clamping min depth
+        d_np = np.clip(d_np, 0.01, 1.0)
+
         # 2. Downsample for performance if requested
+
         if downsample > 1:
             d_np = d_np[::downsample, ::downsample]
             h_new, w_new = d_np.shape
