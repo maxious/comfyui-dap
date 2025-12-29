@@ -47,10 +47,8 @@ def dummy_image():
 
 @pytest.fixture
 def mock_dap_model():
-    """Create a mock model object that behaves like what DAP_Loader returns"""
-    model = MagicMock(spec=torch.nn.Module)
+    inner_model = MagicMock(spec=torch.nn.Module)
 
-    # Mock the forward pass to return a dict with tensors
     def side_effect(x):
         B, C, H, W = x.shape
         return {
@@ -58,11 +56,16 @@ def mock_dap_model():
             "pred_mask": torch.ones((B, 1, H, W)),
         }
 
-    model.side_effect = side_effect
-    model.to.return_value = model
-    model.half.return_value = model
-    model.eval.return_value = model
-    return {"model": model, "precision": "fp32"}
+    inner_model.side_effect = side_effect
+    inner_model.to.return_value = inner_model
+    inner_model.half.return_value = inner_model
+    inner_model.eval.return_value = inner_model
+
+    patcher = MagicMock()
+    patcher.model = inner_model
+    patcher.model_patches_models.return_value = []
+
+    return {"model": patcher, "precision": "fp32"}
 
 
 def pytest_configure(config):

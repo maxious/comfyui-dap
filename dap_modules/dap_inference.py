@@ -25,15 +25,16 @@ class DAP_Inference:
     CATEGORY = "DAP"
 
     def process(self, dap_model, image, invert_output, resize_input):
-        model = dap_model["model"]
+        patcher = dap_model["model"]
         precision = dap_model["precision"]
         device = mm.get_torch_device()
 
         # 1. Prepare Model
-        mm.load_model_gpu(model)
-        model = model.to(device)
+        mm.load_model_gpu(patcher)
+        model = patcher.model
 
         B, H, W, C = image.shape
+
         results = []
         masks = []
 
@@ -125,5 +126,4 @@ class DAP_Inference:
         final_depth = torch.stack(results)
         final_mask = torch.stack(masks)
 
-        model.to(mm.unet_offload_device())
         return (final_depth, final_mask)

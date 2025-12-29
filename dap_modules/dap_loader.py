@@ -121,4 +121,11 @@ class DAP_Loader:
 
         model.eval()
 
-        return ({"model": model, "precision": precision},)
+        # 5. Wrap in ModelPatcher for memory management
+        import comfy.model_patcher
+
+        patcher = comfy.model_patcher.ModelPatcher(
+            model, load_device=device, offload_device=mm.unet_offload_device()
+        )
+
+        return ({"model": patcher, "precision": precision},)
