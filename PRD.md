@@ -9,6 +9,7 @@
 - **US-01**: As a user, I want to use the DAP model without manually downloading weights or setting up complex python paths.
 - **US-02**: As a user, I want to input a panoramic image and receive a high-quality depth map mask.
 - **US-03**: As a user, I want to select different model sizes (Small/Base/Large) to balance VRAM usage and quality.
+- **US-04**: As a user, I want to convert between Equirectangular (ERP) and Cubemap formats for specialized workflows.
 
 ## 3. Node Specifications
 
@@ -44,12 +45,13 @@
   5. Resize output back to original dimensions.
   6. Normalize values for visualization.
 
-### Node C: `DAP_Panoramic_Mesh` (New)
+### Node C: `DAP_Panoramic_Mesh`
 - **Category**: `DAP/Geometry`
 - **Inputs**:
   - `depth`: (`IMAGE`) - Depth map from DAP.
   - `image`: (`IMAGE`, Optional) - For vertex coloring.
   - `mesh_scale`: (`FLOAT`, Default: `1.0`)
+  - `downsample`: (`INT`, Default: `1`)
 - **Outputs**:
   - `TRIMESH`: (`TRIMESH`) - Trimesh object compatible with `ComfyUI-GeometryPack`.
 - **Logic**:
@@ -57,12 +59,24 @@
   2. Build a mesh using `trimesh`.
   3. Map pixel colors to vertices.
 
+### Node D: `DAP_ERP_to_Cubemap` (New)
+- **Category**: `DAP/Conversions`
+- **Inputs**:
+  - `image`: (`IMAGE`) - ERP image.
+  - `face_size`: (`INT`, Default: `1024`)
+  - `layout`: (`Enum`: `["six_faces", "cross"]`)
+  - `interpolation`: (`Enum`: `["lanczos", "cubic", "linear", "nearest"]`)
+- **Outputs**:
+  - `image`: (`IMAGE`) - Batch of 6 face images or a single cross-layout image.
+- **Logic**:
+  1. Perform coordinate remapping from ERP to Cube faces using OpenCV.
+
 ## 4. Technical Constraints & Risks
-- **Interoperability**: We will output `TRIMESH` types to ensure the plugin works seamlessly with `ComfyUI-GeometryPack` for advanced 3D processing.
+- **Interoperability**: We output `TRIMESH` types for `ComfyUI-GeometryPack` compatibility.
 - **Hardcoded Paths**: The `DAP` class in `networks/dap.py` has a hardcoded relative path: `dinov3_repo_dir="./depth_anything_v2_metric/..."`.
-    - **Solution**: We use a `cwd` context manager during loader initialization to fix this without modifying the source.
+    - **Solution**: We use a `cwd` context manager during loader initialization.
 - **Imports**: The codebase assumes it is the root module.
-    - **Solution**: Use `sys.path.append(os.path.join(current_dir, "dap_core"))` inside the node initialization.
+    - **Solution**: Use `sys.path.append(os.path.join(current_dir, "dap_core"))`.
 - **Dependencies**: `open3d` is in `requirements.txt`.
     - **Status**: Essential for point cloud logic, confirmed installed.
 
@@ -76,5 +90,6 @@
 | **BL-04** | **DAP Inference Implementation**: Implement image tensor conversion and inference loop. | P1 | Completed |
 | **BL-05** | **Optimization**: Implement model offloading (CPU/GPU switching). | P2 | Completed |
 | **BL-06** | **Panoramic Mesh**: Implement `DAP_Panoramic_Mesh` node (GeometryPack compatible). | P2 | Completed |
-| **BL-07** | **Normal Map Node**: Implement `DAP_Normal_Map` node. | P3 | Pending |
-| **BL-08** | **UI/Docs**: Add "invert" option and `README.md`. | P3 | Completed |
+| **BL-07** | **Conversions**: Implement `DAP_ERP_to_Cubemap` node. | P2 | Completed |
+| **BL-08** | **Normal Map Node**: Implement `DAP_Normal_Map` node. | P3 | Pending |
+| **BL-09** | **UI/Docs**: Add "invert" option and `README.md`. | P3 | Completed |
