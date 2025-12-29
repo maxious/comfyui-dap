@@ -78,13 +78,23 @@ class DAP_Inference:
             img_norm = (img_final - mean) / std
             img_input = img_norm.unsqueeze(0)
 
+            print(
+                f"DAP Debug: Input Tensor Min={img_input.min().item():.4f}, Max={img_input.max().item():.4f}, NaNs={torch.isnan(img_input).sum().item()}"
+            )
+
             # 3. Inference
+
             with torch.no_grad():
                 outputs = model(img_input)
                 pred_depth = outputs["pred_depth"]  # [1, 1, H, W]
                 pred_mask = outputs.get("pred_mask")  # [1, 1, H, W]
 
+                print(
+                    f"DAP Debug: Raw Output Min={pred_depth.min().item():.4f}, Max={pred_depth.max().item():.4f}, Mean={pred_depth.mean().item():.4f}, NaNs={torch.isnan(pred_depth).sum().item()}"
+                )
+
                 # Cleanup depth using mask if available
+
                 if pred_mask is not None:
                     # Original logic: mask = 1 - pred_mask; mask = mask > 0.5; depth[~mask] = 1
                     # This removes non-panorama content

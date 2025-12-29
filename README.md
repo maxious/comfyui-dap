@@ -50,6 +50,15 @@ Converts Equirectangular (2:1) panoramas into Cube Map faces.
 *   **layout**: `six_faces` (returns a batch of 6) or `cross` (standard 3x4 grid).
 *   **interpolation**: Uses high-quality `lanczos` by default.
 
+## Usage & Templates
+
+### Workflow Templates
+A basic workflow template is included in the `workflow_templates` directory. You can access it through the ComfyUI "Templates" menu or by dragging and dropping `workflow_templates/dap_basic.json` into the ComfyUI workspace.
+
+### Sample Image
+To test the model, you can use this official sample panoramic image:
+*   [01.jpg (HuggingFace)](https://huggingface.co/spaces/Insta360-Research/DAP/blob/main/hfdemo/01.jpg)
+
 ## Technical Details
 *   **Submodule**: This plugin uses the official DAP repository as a Git submodule (`dap_core`) to ensure compatibility with future research updates.
 *   **Interoperability**: By using standard `TRIMESH` and `IMAGE` types, DAP outputs can be piped directly into mesh decimators, 3D exporters, and controlnets.

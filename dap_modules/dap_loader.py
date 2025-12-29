@@ -103,12 +103,19 @@ class DAP_Loader:
             model = DAP(args)
 
             state_dict = torch.load(ckpt_path, map_location="cpu")
+            # Handle possible "module." prefix if saved from DDP
             if state_dict and list(state_dict.keys())[0].startswith("module."):
                 state_dict = {
                     k.replace("module.", ""): v for k, v in state_dict.items()
                 }
 
-            model.load_state_dict(state_dict, strict=False)
+            msg = model.load_state_dict(state_dict, strict=False)
+            print(f"DAP Weight Loading: {len(state_dict)} keys in checkpoint.")
+            print(f"DAP Weight Loading Result: {msg}")
+            if len(msg.missing_keys) > 10:
+                print(
+                    f"WARNING: High number of missing keys ({len(msg.missing_keys)}). Check if weights match architecture."
+                )
 
         finally:
             os.chdir(original_cwd)
