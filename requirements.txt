@@ -8,3 +8,5 @@ xformers
 matplotlib
 safetensors
 opencv-python
+utils3d
+plyfile

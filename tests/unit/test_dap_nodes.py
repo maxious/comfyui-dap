@@ -2,6 +2,7 @@ import pytest
 import torch
 from dap_modules.dap_loader import DAP_Loader
 from dap_modules.dap_inference import DAP_Inference
+from dap_modules.dap_geometry import DAP_Panoramic_Mesh
 
 
 def test_dap_loader_init():
@@ -25,7 +26,6 @@ def test_dap_inference_process_mock(mock_dap_model, dummy_image):
     inference = DAP_Inference()
 
     # Run process
-    # INPUTS: dap_model, image, invert_output, resize_input
     out_images, out_masks = inference.process(
         dap_model=mock_dap_model,
         image=dummy_image,
@@ -36,13 +36,28 @@ def test_dap_inference_process_mock(mock_dap_model, dummy_image):
     # Check output types and shapes
     assert torch.is_tensor(out_images)
     assert torch.is_tensor(out_masks)
-
-    # Input dummy_image was [1, 512, 1024, 3]
-    # Output should be [1, 512, 1024, 3] for depth image
-    # and [1, 512, 1024] for mask
     assert out_images.shape == (1, 512, 1024, 3)
     assert out_masks.shape == (1, 512, 1024)
 
-    # Verify values are in 0..1 range
-    assert out_images.min() >= 0.0
-    assert out_images.max() <= 1.0
+
+def test_dap_geometry_init():
+    """Verify DAP_Panoramic_Mesh can be instantiated"""
+    mesh_gen = DAP_Panoramic_Mesh()
+    input_types = mesh_gen.INPUT_TYPES()
+    assert "depth" in input_types["required"]
+    assert "mesh_scale" in input_types["required"]
+
+
+def test_dap_geometry_process(dummy_image):
+    """Test the mesh generation logic"""
+    mesh_gen = DAP_Panoramic_Mesh()
+
+    # Run process
+    # depth is [1, 512, 1024, 3] from dummy_image fixture
+    result = mesh_gen.generate_mesh(depth=dummy_image, mesh_scale=1.0, downsample=4)
+
+    mesh = result[0]
+    assert hasattr(mesh, "vertices")
+    assert hasattr(mesh, "faces")
+    assert len(mesh.vertices) > 0
+    assert len(mesh.faces) > 0

@@ -27,6 +27,13 @@ A ComfyUI extension for the [Insta360 DAP](https://github.com/Insta360-Research-
 *   **invert_output**: Invert the depth map (standard for ComfyUI depth).
 *   **resize_input**: Resizes to the model's preferred patch size (multiples of 14).
 
+### DAP Panoramic Mesh
+*   **depth**: The depth map from DAP.
+*   **mesh_scale**: Factor to scale the 3D geometry.
+*   **image**: (Optional) Use for vertex coloring.
+*   **downsample**: Reduce mesh density for performance.
+*   **Compatibility**: This node outputs a `TRIMESH` type, making it fully compatible with [ComfyUI-GeometryPack](https://github.com/idm-lab/ComfyUI-GeometryPack) for advanced mesh editing and saving.
+
 ## Testing
 This plugin includes a `pytest` suite for headless verification.
 

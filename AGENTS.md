@@ -23,3 +23,6 @@
 *   **Optimal Performance**:
     *   Users should install `xformers` to ensure compatibility and optimal performance with the underlying backbones.
     *   Command: `pip install torch torchvision xformers -U --index-url https://download.pytorch.org/whl/cu130`
+*   **Interoperability**:
+    *   The `DAP Panoramic Mesh` node outputs a `trimesh.Trimesh` object using the `TRIMESH` type name.
+    *   This ensures compatibility with `ComfyUI-GeometryPack`, allowing users to pipeline DAP outputs into standard mesh decimation, boolean operations, and 3D exporters.
