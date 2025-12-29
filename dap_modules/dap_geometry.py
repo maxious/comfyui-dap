@@ -36,7 +36,7 @@ class DAP_Panoramic_Mesh:
                 "mask": ("MASK",),
                 "remove_long_edges": (
                     "FLOAT",
-                    {"default": 0.5, "min": 0.0, "max": 10.0, "step": 0.1},
+                    {"default": 0.15, "min": 0.0, "max": 2.0, "step": 0.01},
                 ),
                 "stitch_seam": ("BOOLEAN", {"default": True}),
             },
@@ -54,7 +54,7 @@ class DAP_Panoramic_Mesh:
         downsample,
         image=None,
         mask=None,
-        remove_long_edges=0.5,
+        remove_long_edges=0.15,
         stitch_seam=True,
     ):
         d_tensor = depth[0]
