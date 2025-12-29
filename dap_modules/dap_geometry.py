@@ -36,7 +36,11 @@ class DAP_Panoramic_Mesh:
                 "mask": ("MASK",),
                 "remove_long_edges": (
                     "FLOAT",
-                    {"default": 0.15, "min": 0.0, "max": 2.0, "step": 0.01},
+                    {"default": 0.10, "min": 0.0, "max": 2.0, "step": 0.01},
+                ),
+                "max_depth_cutoff": (
+                    "FLOAT",
+                    {"default": 0.99, "min": 0.1, "max": 1.0, "step": 0.01},
                 ),
                 "stitch_seam": ("BOOLEAN", {"default": True}),
             },
@@ -54,7 +58,8 @@ class DAP_Panoramic_Mesh:
         downsample,
         image=None,
         mask=None,
-        remove_long_edges=0.15,
+        remove_long_edges=0.10,
+        max_depth_cutoff=0.99,
         stitch_seam=True,
     ):
         d_tensor = depth[0]
@@ -112,6 +117,19 @@ class DAP_Panoramic_Mesh:
         mesh = trimesh.Trimesh(
             vertices=vertices, faces=faces, vertex_colors=vertex_colors, process=False
         )
+
+        # Filter by Depth Cutoff (Sky Removal)
+        if max_depth_cutoff < 1.0:
+            # Flatten depth to match vertices
+            d_flat = d_np.flatten()
+            # Identify valid vertices
+            valid_verts = d_flat <= max_depth_cutoff
+
+            # Keep faces where ALL vertices are valid (conservative)
+            # or ANY vertex is valid? Usually ALL prevents sky connection.
+            face_mask = valid_verts[mesh.faces].all(axis=1)
+            mesh.update_faces(face_mask)
+            mesh.remove_unreferenced_vertices()
 
         # Filter by Mask
         if mask is not None:
