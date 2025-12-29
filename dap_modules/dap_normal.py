@@ -1,9 +1,9 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 import os
 import sys
 
-# Add dap_core to sys.path
 current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 dap_core_path = os.path.join(current_dir, "dap_core")
 if dap_core_path not in sys.path:
@@ -17,6 +17,7 @@ class DAP_Normal_Map:
             "required": {
                 "depth": ("IMAGE",),
                 "normal_standard": (["ComfyUI", "DAP"], {"default": "ComfyUI"}),
+                "downsample": ("INT", {"default": 1, "min": 1, "max": 8, "step": 1}),
             },
             "optional": {
                 "mask": ("MASK",),
@@ -28,29 +29,31 @@ class DAP_Normal_Map:
     FUNCTION = "generate_normal"
     CATEGORY = "DAP/Geometry"
 
-    def generate_normal(self, depth, normal_standard, mask=None):
-        try:
-            import open3d as o3d
-        except ImportError:
-            raise RuntimeError(
-                "Open3D is required for normal map generation. Install with: pip install open3d"
-            )
-
-        # 1. Prepare depth (B, H, W)
+    def generate_normal(self, depth, normal_standard, downsample=1, mask=None):
+        device = depth.device
         d_tensor = depth[0]
         H, W, C = d_tensor.shape
+
+        if downsample > 1:
+            d_small = d_tensor.permute(2, 0, 1).unsqueeze(0)
+            d_small = F.interpolate(
+                d_small, size=(H // downsample, W // downsample), mode="bilinear"
+            )
+            d_tensor = d_small.squeeze(0).permute(1, 2, 0)
+            curr_H, curr_W = d_tensor.shape[0], d_tensor.shape[1]
+        else:
+            curr_H, curr_W = H, W
+
         d_np = d_tensor.cpu().numpy()
         if C > 1:
             d_np = np.mean(d_np, axis=2)
         else:
             d_np = d_np.squeeze()
 
-        # 2. Unproject to points
-        y, x = np.mgrid[0:H, 0:W]
-        u = x / (W - 1)
-        v = y / (H - 1)
+        y, x = np.mgrid[0:curr_H, 0:curr_W]
+        u = x / (curr_W - 1)
+        v = y / (curr_H - 1)
 
-        # Equirectangular math
         theta = (1.0 - u) * (2.0 * np.pi)
         phi = v * np.pi
 
@@ -59,37 +62,54 @@ class DAP_Normal_Map:
         dz = np.cos(phi)
 
         dirs = np.stack([dx, dy, dz], axis=-1)
-        points = (dirs * d_np[..., None]).reshape(-1, 3)
+        points = dirs * d_np[..., None]
 
-        # 3. Open3D Normal Estimation
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
+        p_tensor = torch.from_numpy(points.astype(np.float32)).to(device)
 
-        # Standard estimation
-        pcd.estimate_normals(
-            search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30)
+        p_pad = (
+            F.pad(
+                p_tensor.permute(2, 0, 1).unsqueeze(0), (1, 1, 1, 1), mode="replicate"
+            )
+            .squeeze(0)
+            .permute(1, 2, 0)
         )
-        # Orient towards center (spherical)
-        pcd.orient_normals_towards_camera_location([0, 0, 0])
 
-        normals = np.asarray(pcd.normals).reshape(H, W, 3)
+        v_right = p_pad[1:-1, 2:, :] - p_tensor
+        v_left = p_tensor - p_pad[1:-1, :-2, :]
+        v_down = p_pad[2:, 1:-1, :] - p_tensor
+        v_up = p_tensor - p_pad[:-2, 1:-1, :]
 
-        # 4. Standards
+        n1 = torch.cross(v_right, v_down, dim=-1)
+        n2 = torch.cross(v_down, v_left, dim=-1)
+        n3 = torch.cross(v_left, v_up, dim=-1)
+        n4 = torch.cross(v_up, v_right, dim=-1)
+
+        normals = (n1 + n2 + n3 + n4) / 4.0
+
+        norm = torch.norm(normals, dim=-1, keepdim=True)
+        normals = normals / (norm + 1e-6)
+
+        dot_product = torch.sum(normals * p_tensor, dim=-1, keepdim=True)
+        normals = torch.where(dot_product > 0, -normals, normals)
+
         if normal_standard == "DAP":
-            # DAP reorders and flips
-            normals = normals * np.array([-1, -1, 1])
-            # Reorder to [X, Z, Y] as seen in depth2normal.py
-            normals = np.stack(
-                [normals[..., 0], normals[..., 2], normals[..., 1]], axis=-1
+            normals = normals * torch.tensor([-1.0, -1.0, 1.0], device=device)
+            normals = torch.stack(
+                [normals[..., 0], normals[..., 2], normals[..., 1]], dim=-1
             )
 
-        # Convert [-1, 1] to [0, 1]
+        if downsample > 1:
+            normals = normals.permute(2, 0, 1).unsqueeze(0)
+            normals = F.interpolate(normals, size=(H, W), mode="bilinear")
+            normals = normals.squeeze(0).permute(1, 2, 0)
+            norm = torch.norm(normals, dim=-1, keepdim=True)
+            normals = normals / (norm + 1e-6)
+
         normal_rgb = (normals + 1.0) * 0.5
 
-        # 5. Masking
         if mask is not None:
-            m_np = mask[0].cpu().numpy()
-            normal_rgb = normal_rgb * m_np[..., None]
+            m_tensor = mask[0].to(device).unsqueeze(-1)
+            normal_rgb = normal_rgb * m_tensor
 
-        res = torch.from_numpy(normal_rgb.astype(np.float32)).unsqueeze(0)
+        res = normal_rgb.unsqueeze(0).cpu()
         return (res,)

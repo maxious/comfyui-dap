@@ -108,10 +108,10 @@ def test_dap_normal_process(dummy_image):
     """Test normal map generation logic"""
     node = DAP_Normal_Map()
 
-    # We use a downsampled version of dummy_image for speed if possible
-    # but the node doesn't have a downsample param yet.
-    # We'll just run it on the 512x1024 image.
-    result = node.generate_normal(depth=dummy_image, normal_standard="ComfyUI")
+    # Run on downsampled image for speed
+    result = node.generate_normal(
+        depth=dummy_image, normal_standard="ComfyUI", downsample=4
+    )
 
     assert torch.is_tensor(result[0])
     assert result[0].shape == (1, 512, 1024, 3)
