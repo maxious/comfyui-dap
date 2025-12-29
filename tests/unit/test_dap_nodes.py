@@ -6,7 +6,6 @@ from dap_modules.dap_geometry import DAP_Panoramic_Mesh
 from dap_modules.dap_conversions import DAP_ERP_to_Cubemap
 from dap_modules.dap_normal import DAP_Normal_Map
 
-
 from unittest.mock import MagicMock, patch
 
 
@@ -59,8 +58,13 @@ def test_dap_geometry_process(dummy_image):
     mesh_gen = DAP_Panoramic_Mesh()
 
     # Run process
-    # depth is [1, 512, 1024, 3] from dummy_image fixture
-    result = mesh_gen.generate_mesh(depth=dummy_image, mesh_scale=1.0, downsample=4)
+    result = mesh_gen.generate_mesh(
+        depth=dummy_image,
+        mesh_scale=1.0,
+        downsample=4,
+        remove_long_edges=0.5,
+        stitch_seam=True,
+    )
 
     mesh = result[0]
     assert hasattr(mesh, "vertices")
@@ -115,6 +119,5 @@ def test_dap_normal_process(dummy_image):
 
     assert torch.is_tensor(result[0])
     assert result[0].shape == (1, 512, 1024, 3)
-    # Check normalization (values should be around 0.5 for flat areas)
     assert result[0].min() >= 0.0
     assert result[0].max() <= 1.0
