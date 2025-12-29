@@ -11,29 +11,34 @@ sys.path.insert(0, str(plugin_dir))
 sys.path.insert(0, str(plugin_dir / "dap_core"))
 
 # 2. Mock ComfyUI modules
-# We use simple objects instead of MagicMock for the base modules to avoid weird recursion
-mock_folder_paths = type("folder_paths", (), {})()
+mock_folder_paths = MagicMock()
 mock_folder_paths.models_dir = str(plugin_dir / "models_mock")
-mock_folder_paths.get_full_path = lambda *args, **kwargs: None
-mock_folder_paths.get_filename_list = lambda *args, **kwargs: []
+mock_folder_paths.get_full_path.return_value = None
 sys.modules["folder_paths"] = mock_folder_paths
 
-mock_mm = type("model_management", (), {})()
-mock_mm.get_torch_device = lambda: torch.device("cpu")
-mock_mm.unet_offload_device = lambda: torch.device("cpu")
-mock_mm.load_model_gpu = lambda x: None
-mock_mm.soft_empty_cache = lambda: None
-mock_mm.is_device_mps = lambda x: False
-mock_mm.get_autocast_device = lambda x: "cpu"
-
-mock_comfy = type("comfy", (), {})()
-mock_comfy.model_management = mock_mm
-sys.modules["comfy"] = mock_comfy
+mock_mm = MagicMock()
+mock_mm.get_torch_device.return_value = torch.device("cpu")
+mock_mm.unet_offload_device.return_value = torch.device("cpu")
 sys.modules["comfy.model_management"] = mock_mm
 
+mock_comfy = MagicMock()
+mock_comfy.model_management = mock_mm
+sys.modules["comfy"] = mock_comfy
+
+mock_utils = MagicMock()
+sys.modules["comfy.utils"] = mock_utils
+
+# Mock huggingface_hub
+mock_hf = MagicMock()
+mock_hf.hf_hub_url.return_value = "http://mock-url"
+sys.modules["huggingface_hub"] = mock_hf
+
+# Mock requests
+mock_requests = MagicMock()
+sys.modules["requests"] = mock_requests
+
+
 # 3. Fixtures
-
-
 @pytest.fixture
 def dummy_image():
     """Create a dummy 2:1 panorama-style image tensor [1, 512, 1024, 3]"""

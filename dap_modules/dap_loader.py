@@ -1,9 +1,11 @@
 import os
 import sys
 import torch
+import requests
 import folder_paths
 import comfy.model_management as mm
-from huggingface_hub import hf_hub_download
+from comfy.utils import ProgressBar
+from huggingface_hub import hf_hub_download, hf_hub_url
 from argparse import Namespace
 
 # Add dap_core to sys.path so imports work
@@ -19,6 +21,28 @@ except ImportError:
     # Fallback/Safety check
     print("DAP import failed. Ensure dap_core is in path.")
     DAP = None
+
+
+def download_with_progress(url, dest_path, filename):
+    print(f"Downloading {filename} from {url}...")
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+
+    total_size = int(response.headers.get("content-length", 0))
+    pbar = ProgressBar(total_size)
+
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+    # Download with progress updates
+    with open(dest_path, "wb") as f:
+        downloaded = 0
+        for chunk in response.iter_content(chunk_size=1024 * 1024):  # 1MB chunks
+            if chunk:
+                f.write(chunk)
+                downloaded += len(chunk)
+                pbar.update_absolute(downloaded, total_size)
+    print(f"Finished downloading {filename}")
 
 
 class DAP_Loader:
@@ -40,38 +64,34 @@ class DAP_Loader:
         device = mm.get_torch_device()
 
         # 1. Define Model Files
-        # Mapping size to HF filename. Currently only 'model.pth' is available.
-        # size mapping is kept for future expansion.
         model_filename = "model.pth"
+        repo_id = "Insta360-Research/DAP-weights"
 
         # 2. Download/Locate Model
-        # Check standard ComfyUI locations first
         ckpt_path = folder_paths.get_full_path("checkpoints", model_filename)
 
         if not ckpt_path:
-            # Check dedicated folder
             dap_models_dir = os.path.join(folder_paths.models_dir, "dap")
-            if not os.path.exists(dap_models_dir):
-                os.makedirs(dap_models_dir)
-
             ckpt_path = os.path.join(dap_models_dir, model_filename)
 
             if not os.path.exists(ckpt_path):
-                print(f"Downloading {model_filename} to {ckpt_path}...")
+                url = hf_hub_url(repo_id=repo_id, filename=model_filename)
                 try:
+                    download_with_progress(url, ckpt_path, model_filename)
+                except Exception as e:
+                    # Fallback to standard hf_hub_download if manual fails
+                    print(
+                        f"Manual download failed: {e}. Falling back to hf_hub_download..."
+                    )
                     ckpt_path = hf_hub_download(
-                        repo_id="Insta360-Research/DAP-weights",
+                        repo_id=repo_id,
                         filename=model_filename,
                         local_dir=dap_models_dir,
                     )
-                except Exception as e:
-                    raise RuntimeError(f"Failed to download model: {e}")
 
         # 3. Initialize Model with Patching
         args = Namespace()
-        args.midas_model_type = (
-            model_size  # Fixed to 'vitl' for now based on hardcoded arch in dap.py
-        )
+        args.midas_model_type = model_size
         args.fine_tune_type = "none"
         args.min_depth = 0.001
         args.max_depth = 1.0
@@ -80,12 +100,9 @@ class DAP_Loader:
         original_cwd = os.getcwd()
         try:
             os.chdir(dap_core_path)
-            print(f"Changed CWD to {dap_core_path} for initialization")
-
             model = DAP(args)
 
             state_dict = torch.load(ckpt_path, map_location="cpu")
-            # Handle possible "module." prefix if saved from DDP
             if state_dict and list(state_dict.keys())[0].startswith("module."):
                 state_dict = {
                     k.replace("module.", ""): v for k, v in state_dict.items()
@@ -95,7 +112,6 @@ class DAP_Loader:
 
         finally:
             os.chdir(original_cwd)
-            print(f"Restored CWD to {original_cwd}")
 
         # 4. Quantization / Precision
         if precision == "fp16":

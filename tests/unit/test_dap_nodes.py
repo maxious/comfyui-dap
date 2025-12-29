@@ -7,12 +7,16 @@ from dap_modules.dap_conversions import DAP_ERP_to_Cubemap
 from dap_modules.dap_normal import DAP_Normal_Map
 
 
+from unittest.mock import MagicMock, patch
+
+
 def test_dap_loader_init():
     """Verify DAP_Loader can be instantiated and has correct INPUT_TYPES"""
-    loader = DAP_Loader()
-    input_types = loader.INPUT_TYPES()
-    assert "model_size" in input_types["required"]
-    assert "precision" in input_types["required"]
+    with patch("huggingface_hub.hf_hub_download"), patch("requests.get"):
+        loader = DAP_Loader()
+        input_types = loader.INPUT_TYPES()
+        assert "model_size" in input_types["required"]
+        assert "precision" in input_types["required"]
 
 
 def test_dap_inference_init():
